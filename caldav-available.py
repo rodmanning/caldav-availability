@@ -59,6 +59,15 @@ Logic of program is as follows:
 
 """
 
+ARG_DEFAULTS = {
+    "start": datetime.datetime.now(),
+    "end": (datetime.datetime.now() + datetime.timedelta(days=14)),
+    "day_start": "0600",     # 0600 local time
+    "day_end": "2200",      # 2200 local time
+    "block_length": "6",  # Hours
+    "timezone": "Australia/Darwin"  # Default local timezone
+}
+
 
 class event(object):
     """An event extracted from a CalDAV calendar entry.
@@ -82,10 +91,10 @@ class event(object):
 
     """
 
-    def __init__(self, event_details):
+    def __init__(self, event_data):
         """Initialize an Event object.
 
-        event_details:
+        event_data:
           A dictionary containing the data from the CalDAV calendar file for
           the event.
 
@@ -158,7 +167,8 @@ def normalize_dt(tz_str, local_ts, ts_fmt=None):
     return utc_dt
 
 
-def process_cal_data(cal_data, field_list=None, ts_fmt=None):
+def process_cal_data(cal_data, start=None, end=None,
+                     field_list=None, ts_fmt=None):
     """Process a CalDAV file to extract information about an event.
 
     field_list:
@@ -182,6 +192,8 @@ def process_cal_data(cal_data, field_list=None, ts_fmt=None):
             elif (field.startswith("DTSTART")) or (field.startswith("DTEND")):
                 field_name, _, tz_str = field.split(";")
                 utc_dt = normalize_dt(tz_str, data, ts_fmt)
+                print(start, utc_dt, end)
+                print(start <= utc_dt <= end)
                 stack[idx][field_name] = utc_dt
                 stack[idx][field_name]
             elif field == "END" and data == "VEVENT":
@@ -191,9 +203,9 @@ def process_cal_data(cal_data, field_list=None, ts_fmt=None):
     return stack
 
 
-def create_events(calendar_file, start_date, end_date):
+def create_events(calendar_file, start, end):
     """Create events from data contained in a CalDAV file."""
-
+    calendar_data = process_cal_data(calendar_file, start, end)
 
 def create_blocks(start_date, end_date, start_hours, end_hours, block_length):
     """Create the blocks used to calculate free/busy time."""
@@ -250,23 +262,45 @@ def parse_args():
     )
     parser.add_argument(
         "--day_start",
-        help="Earliest free/busy time is calculated (default: 6 AM)",
+        help="Earliest free/busy time is calculated (default: {0})"
+             .format(ARG_DEFAULTS["day_start"]),
         metavar="H",
         type=int,
     )
     parser.add_argument(
         "--day_end",
-        help="Latest free/busy time is calculated (default: 10 PM)",
+        help="Latest free/busy time is calculated (default: {0})"
+             .format(ARG_DEFAULTS["day_end"]),
         metavar="H",
         type=int,
     )
     parser.add_argument(
         "--block_length",
-        help="Length of blocks to show free/busy time (default: 6 hrs)",
+        help="Length of blocks of free/busy time (default: {0} hrs)"
+             .format(ARG_DEFAULTS["block_length"]),
         metavar="H",
         type=int,
     )
+    parser.add_argument(
+        "--timezone",
+        help="The local timezone to base the calendar on (default: {0})"
+             .format(ARG_DEFAULTS["timezone"]),
+    )
     args = parser.parse_args()
+    # Set defaults for args:
+    for arg in ARG_DEFAULTS:
+        if vars(args)[arg] is None:
+            vars(args)[arg] = ARG_DEFAULTS[arg]
+    # Ensure start and end date strings are converted to UTC datetimes
+    for item in ("start", "end"):
+        # Convert to datetime objects
+        if type(vars(args)[item]) is str:
+            vars(args)[item] = datetime.datetime.strptime(
+                vars(args)[item], "%Y-%m-%d"
+            )
+        # Localize to the selected local time
+        tz = pytz.timezone(ARG_DEFAULTS["timezone"])
+        vars(args)[item] = tz.localize(vars(args)[item])
     return args
 
 
@@ -275,6 +309,8 @@ if __name__ == "__main__":
     # This block is used to get data for *testing* this program
     with open("./Calendar.ics", "r") as cal_file:
         cal_data = cal_file.readlines()
+    print(datetime.datetime.now(), datetime.datetime.utcnow())
+    print("ZULU")
     # End test block
     # cal_data = get_calendar(args.username, args.password, args.url, args.realm)
-    event_data = process_cal_data(cal_data)
+    create_events(cal_data, args.start, args.end)
