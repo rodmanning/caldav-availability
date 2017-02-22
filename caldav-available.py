@@ -3,6 +3,8 @@
 
 import argparse
 import urllib.request
+import pytz
+import datetime
 
 """Compute free/busy information from a CalDAV file.
 
@@ -67,10 +69,7 @@ class event(object):
       The unique ID assigned to the event by the calendar.
 
     name:
-      The name of the event.
-
-    summary:
-      The description or summary saved for the event
+      The name, or description, or summary saved for the event
 
     start_dt:
       The datetime the event starts (in UTC).
@@ -82,7 +81,16 @@ class event(object):
       The categories the event is tagged with.
 
     """
-    pass
+
+    def __init__(self, event_details):
+        """Initialize an Event object.
+
+        event_details:
+          A dictionary containing the data from the CalDAV calendar file for
+          the event.
+
+        """
+        pass
 
 
 class block(object):
@@ -119,6 +127,68 @@ def get_calendar(username, password, url, realm):
     with urllib.request.urlopen(url) as f:
         cal_data = f.readlines()
     return cal_data
+
+
+def normalize_dt(tz_str, local_ts, ts_fmt=None):
+    """Normalize a local time to UTC.
+
+    An example of what this function does is that it converts the following
+    timezone string 'TZID=Asia/Hong_Kong' and a seperate timestamp string of
+    '20170210T140000' into a UTC datetime of 2017-02-10 05:30:00+00:00.
+
+    tz_str:
+      A string representing a timestamp in local time. Note that this must
+      include a timezone that can be parsed by pytz.
+
+    local_ts:
+      A string representing a timestamp in localtime.
+
+    ts_fmt:
+      A string specifying the format for the timestamp. Defaults to
+      '%Y%m%dT%H%M%S'.
+
+    """
+    if ts_fmt is None:
+        ts_fmt = "%Y%m%dT%H%M%S"
+    tz_name = tz_str.split("=")[1]
+    tz = pytz.timezone(tz_name)
+    local_dt = datetime.datetime.strptime(local_ts, ts_fmt)
+    local_dt = tz.localize(local_dt)
+    utc_dt = local_dt.astimezone(pytz.utc)
+    return utc_dt
+
+
+def process_cal_data(cal_data, field_list=None, ts_fmt=None):
+    """Process a CalDAV file to extract information about an event.
+
+    field_list:
+      A list of strings of the field names containing the data to be
+      extracted from the CalDAV file. (Note that this is case sensitive.)
+
+    """
+    if field_list is None:
+        field_list = ("SUMMARY", "CATEGORIES", "STATUS", "UID")
+    stack = {}   # Stack to hold data about events
+    idx = 1
+    for line in cal_data:
+        text = line.rstrip("\n")  # May need to .decode() on byte objects?
+        try:
+            field, _, data = text.partition(":")
+            data = data
+            if (field == "BEGIN") and (data == "VEVENT"):
+                stack[idx] = {}
+            elif field in field_list:
+                stack[idx][field] = data
+            elif (field.startswith("DTSTART")) or (field.startswith("DTEND")):
+                field_name, _, tz_str = field.split(";")
+                utc_dt = normalize_dt(tz_str, data, ts_fmt)
+                stack[idx][field_name] = utc_dt
+                stack[idx][field_name]
+            elif field == "END" and data == "VEVENT":
+                idx = idx + 1
+        except ValueError:
+            pass
+    return stack
 
 
 def create_events(calendar_file, start_date, end_date):
@@ -202,4 +272,9 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    cal_data = get_calendar(args.username, args.password, args.url, args.realm)
+    # This block is used to get data for *testing* this program
+    with open("./Calendar.ics", "r") as cal_file:
+        cal_data = cal_file.readlines()
+    # End test block
+    # cal_data = get_calendar(args.username, args.password, args.url, args.realm)
+    event_data = process_cal_data(cal_data)
