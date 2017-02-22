@@ -23,11 +23,11 @@ end_date:
   Last date of period to be processed. Defaults to 14 days after current
   local date.
 
-start_hour:
+day_start:
   First hour of the day to be considered in free/busy calculations. Defaults to
   0600 local time.
 
-end_hour:
+day_end:
   Last hour of the day to be considered in free/busy calculations. Defaults to
   2200 local time.
 
@@ -141,6 +141,34 @@ def main():
     parser.add_argument(
         "url",
         help="URL to access CalDAV file on server"
+    )
+    parser.add_argument(
+        "--start",
+        help="Start of period to be processed (default: today)",
+        metavar="yyyy-mm-dd"
+    )
+    parser.add_argument(
+        "--end",
+        help="End of period to be processed (default: +14 days)",
+        metavar="yyyy-mm-dd"
+    )
+    parser.add_argument(
+        "--day_start",
+        help="Earliest free/busy time is calculated (default: 6 AM)",
+        metavar="H",
+        type=int,
+    )
+    parser.add_argument(
+        "--day_end",
+        help="Latest free/busy time is calculated (default: 10 PM)",
+        metavar="H",
+        type=int,
+    )
+    parser.add_argument(
+        "--block_length",
+        help="Length of blocks to show free/busy time (default: 6 hrs)",
+        metavar="H",
+        type=int,
     )
     args = parser.parse_args()
     print(args)
