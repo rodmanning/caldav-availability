@@ -1,5 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+
+import argparse
+
 """Compute free/busy information from a CalDAV file.
 
 Inputs are as follows:
@@ -50,6 +53,7 @@ Logic of program is as follows:
 
 6. Assign a classification to the block to indicate if it has high (75 <= n),
    moderate (30 < n < 75), or low (n <= 30 ) time allocated.
+
 """
 
 
@@ -75,6 +79,7 @@ class event(object):
 
     categories:
       The categories the event is tagged with.
+
     """
     pass
 
@@ -84,6 +89,7 @@ class block(object):
 
     Blocks are of a defined length and are the units of time that are used to
     calculate the free/busy information for display in a calendar.
+
     """
     pass
 
@@ -115,3 +121,29 @@ def calc_block_hours(blocks):
 def classify_block(blocks):
     """Classify a block based on how free/busy it is."""
     pass
+
+
+def main():
+    """Main program loop for user CLI interaction."""
+    # Create the parser to process the CLI arguments
+    parser = argparse.ArgumentParser(
+        description="Calculate free/busy time from a CalDAV calendar file.",
+        epilog="Copyright (c) Rod Manning 2017"
+    )
+    parser.add_argument(
+        "username",
+        help="Username to access CalDAV file on server"
+    )
+    parser.add_argument(
+        "password",
+        help="Password to access CalDAV file on server",
+    )
+    parser.add_argument(
+        "url",
+        help="URL to access CalDAV file on server"
+    )
+    args = parser.parse_args()
+    print(args)
+
+if __name__ == "__main__":
+    main()
