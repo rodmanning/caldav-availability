@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import urllib.request
 
 """Compute free/busy information from a CalDAV file.
 
@@ -94,9 +95,30 @@ class block(object):
     pass
 
 
-def get_calendar(calendar_url, username, password):
-    """Get a CalDAV file from a server."""
-    pass
+def get_calendar(username, password, url, realm):
+    """Get a CalDAV file from a server.
+
+    This function first creates a handler to authenticate with the web
+    server hosting the CalDAV file.
+
+    It then sends a request to access the calendar at the supplied url.
+
+    The data that's returned is returned as a list of strings (one string
+    per line).
+
+    """
+    # Setup the authentication handler
+    auth_handler = urllib.request.HTTPBasicAuthHandler()
+    auth_handler.add_password(
+        realm=realm, uri=url,
+        user=username, passwd=password
+    )
+    opener = urllib.request.build_opener(auth_handler)
+    urllib.request.install_opener(opener)
+    # Retrieve the CalDAV file
+    with urllib.request.urlopen(url) as f:
+        cal_data = f.readlines()
+    return cal_data
 
 
 def create_events(calendar_file, start_date, end_date):
@@ -123,7 +145,7 @@ def classify_block(blocks):
     pass
 
 
-def main():
+def parse_args():
     """Main program loop for user CLI interaction."""
     # Create the parser to process the CLI arguments
     parser = argparse.ArgumentParser(
@@ -141,6 +163,10 @@ def main():
     parser.add_argument(
         "url",
         help="URL to access CalDAV file on server"
+    )
+    parser.add_argument(
+        "realm",
+        help="Realm to access CalDAV file on server"
     )
     parser.add_argument(
         "--start",
@@ -171,7 +197,9 @@ def main():
         type=int,
     )
     args = parser.parse_args()
-    print(args)
+    return args
+
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    cal_data = get_calendar(args.username, args.password, args.url, args.realm)
