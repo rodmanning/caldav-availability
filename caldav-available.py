@@ -99,7 +99,17 @@ class event(object):
           the event.
 
         """
-        pass
+        self.uid = event_data["UID"]
+        self.name = event_data["SUMMARY"]
+        self.start_dt = event_data["DTSTART"]
+        self.end_dt = event_data["DTEND"]
+        self.categories = event_data["CATEGORIES"].split(" ")
+
+    def __str__(self):
+        return "{0} ({1})".format(
+            self.name,
+            self.start_dt.strftime("%d-%B %Y")
+        )
 
 
 class block(object):
@@ -192,8 +202,6 @@ def process_cal_data(cal_data, start=None, end=None,
             elif (field.startswith("DTSTART")) or (field.startswith("DTEND")):
                 field_name, _, tz_str = field.split(";")
                 utc_dt = normalize_dt(tz_str, data, ts_fmt)
-                print(start, utc_dt, end)
-                print(start <= utc_dt <= end)
                 stack[idx][field_name] = utc_dt
                 stack[idx][field_name]
             elif field == "END" and data == "VEVENT":
@@ -206,6 +214,12 @@ def process_cal_data(cal_data, start=None, end=None,
 def create_events(calendar_file, start, end):
     """Create events from data contained in a CalDAV file."""
     calendar_data = process_cal_data(calendar_file, start, end)
+    events = []   # List to hold the events
+    for item in calendar_data.values():
+        evt = event(item)
+        events.append(evt)
+    return events
+
 
 def create_blocks(start_date, end_date, start_hours, end_hours, block_length):
     """Create the blocks used to calculate free/busy time."""
@@ -309,8 +323,6 @@ if __name__ == "__main__":
     # This block is used to get data for *testing* this program
     with open("./Calendar.ics", "r") as cal_file:
         cal_data = cal_file.readlines()
-    print(datetime.datetime.now(), datetime.datetime.utcnow())
-    print("ZULU")
     # End test block
     # cal_data = get_calendar(args.username, args.password, args.url, args.realm)
-    create_events(cal_data, args.start, args.end)
+    events = create_events(cal_data, args.start, args.end)
