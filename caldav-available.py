@@ -87,6 +87,9 @@ class Event(object):
     end_dt:
       The datetime the event ends (in UTC).
 
+    length:
+      A timedelta representing the length of the event.
+
     categories:
       The categories the event is tagged with.
 
@@ -102,14 +105,15 @@ class Event(object):
         """
         self.uid = kwargs["UID"]
         self.name = kwargs["SUMMARY"]
-        self.start_dt = kwargs["DTSTART"]
-        self.end_dt = kwargs["DTEND"]
+        self.start = kwargs["DTSTART"]
+        self.end = kwargs["DTEND"]
+        self.length = self.end - self.start
         self.categories = kwargs["CATEGORIES"].split(" ")
 
     def __str__(self):
         return "{0} ({1})".format(
             self.name,
-            self.start_dt.strftime("%d-%B %Y")
+            self.start.strftime("%d-%B %Y")
         )
 
 
@@ -140,8 +144,21 @@ class Block(object):
         self.busy = datetime.timedelta(minutes=0)
         self.free = self.length
         self.classes = []
+        self.categories = []
 
+    def assign(self, hours):
+        """Function to assign hours to a block.
 
+        This is a convenience function which assigned a period of time to a
+        block as 'busy' and then updates the 'free' time.
+
+        hours:
+          A timedelta representing the amount of time to be assigned as busy.
+
+        """
+        self.busy = self.busy + hours
+        self.free = self.length - self.busy
+        print(self.free, self.busy)
 def get_calendar(username, password, url, realm):
     """Get a CalDAV file from a server.
 
@@ -252,6 +269,7 @@ def create_blocks(start_dt, end_dt, start_hour, end_hour, block_length):
     )
     block_length = datetime.timedelta(hours=block_length)
     block_end = block_start + block_length
+    day_start = block_start
     day_end = block_start.replace(hour=end_hour)
     end_of_period = end_dt.replace(
         hour=end_hour,
@@ -263,10 +281,10 @@ def create_blocks(start_dt, end_dt, start_hour, end_hour, block_length):
     while block_start < end_of_period:
         # Test for incrementing to the next day
         if block_start > day_end:
-            block_start = block_start.replace(hour=start_hour)
-            block_start = block_start + datetime.timedelta(hours=24)
-            block_end = block_start + block_length
+            day_start = day_start + datetime.timedelta(hours=24)
             day_end = block_start.replace(hour=end_hour)
+            block_start = day_start
+            block_end = block_start + block_length
         # Test to set end of block to last hour in daily calendar
         if block_end > day_end:
             block_end = block_start.replace(hour=end_hour)
@@ -279,18 +297,48 @@ def create_blocks(start_dt, end_dt, start_hour, end_hour, block_length):
         # the block_end. Note that because we update the block_start first,
         # The block end is incremented based onthe *new* starting dt :)
         block_start = block_start + block_length
-        block_end = block_start + block_length
+        block_end = block_end + block_length
     return stack
 
 
-def assign_events(events, blocks):
-    """Assign events to blocks that they fully or partially fall within."""
-    pass
+def check_overlap(obj1, obj2):
+    """Check whether two objects with start and end datetimes overlap."""
+    check_1 = (obj1.start <= obj2.start <= obj1.end)
+    check_2 = (obj2.start <= obj1.start <= obj2.end)
+    if check_1 or check_2 is True:
+        return True
+    else:
+        return False
 
 
-def calc_block_hours(blocks):
-    """Calculate how many hours are assigned for each block."""
-    pass
+def calculate_overlap(obj1, obj2):
+    """Calculate the amount of overlap between two objects.
+
+    Each object must have a start and end property expressed as a datetime.
+
+    """
+    max_start = max(obj1.start, obj2.start)
+    min_end = min(obj1.end, obj2.end)
+    hours = min_end - max_start
+    return hours
+
+
+def assign_hours_to_blocks(events, blocks, timezone):
+    """Assign the hours in an event to a particular block.
+
+    This function is based on the logic that there are going to be more blocks
+    than there are events, so it will be faster and easier to iterate through
+    the events than it would be to iterate through the blocks.
+
+    """
+    for evt in events:
+        # Get all of the blocks that overlap +/- 1 day when the event takes
+        # place
+        # Check if the block overlaps
+        for blk in blocks:
+            if check_overlap(evt, blk) is True:
+                hours = calculate_overlap(evt, blk)
+                blk.assign(hours)
 
 
 def classify_block(blocks):
@@ -376,6 +424,9 @@ def parse_args():
     args.block_length = int(args.block_length)
     args.day_start = int(args.day_start)
     args.day_end = int(args.day_end)
+    # Validation of start and end date
+    if args.start > args.end:
+        raise ValueError("Start date must be before the end date")
     return args
 
 
@@ -390,3 +441,4 @@ if __name__ == "__main__":
     blocks = create_blocks(
         args.start, args.end, args.day_start, args.day_end, args.block_length
     )
+    assign_hours_to_blocks(events, blocks, args.timezone)
