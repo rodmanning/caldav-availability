@@ -68,7 +68,10 @@ ARG_DEFAULTS = {
     "block_length": "6",  # Hours
     "timezone": "Australia/Darwin"  # Default local timezone
 }
-
+BUSY_THRESHOLDS = {
+    "low": 0.35,
+    "high": 0.75
+}
 
 class Event(object):
     """An event extracted from a CalDAV calendar entry.
@@ -158,7 +161,8 @@ class Block(object):
         """
         self.busy = self.busy + hours
         self.free = self.length - self.busy
-        print(self.free, self.busy)
+
+
 def get_calendar(username, password, url, realm):
     """Get a CalDAV file from a server.
 
@@ -341,9 +345,20 @@ def assign_hours_to_blocks(events, blocks, timezone):
                 blk.assign(hours)
 
 
-def classify_block(blocks):
-    """Classify a block based on how free/busy it is."""
-    pass
+def classify_blocks(blocks):
+    """Classify a block based on how free/busy it is.
+
+    Blocks are classified as determined by the values set in BUSY_THRESHOLDS.
+
+    """
+    for blk in blocks:
+        assigned = blk.busy / blk.length
+        if assigned > BUSY_THRESHOLDS["high"]:
+            blk.classes.append("high")
+        elif BUSY_THRESHOLDS["low"] < assigned <= BUSY_THRESHOLDS["high"]:
+            blk.classes.append("medium")
+        elif assigned <= BUSY_THRESHOLDS["low"]:
+            blk.classes.append("low")
 
 
 def parse_args():
@@ -442,3 +457,4 @@ if __name__ == "__main__":
         args.start, args.end, args.day_start, args.day_end, args.block_length
     )
     assign_hours_to_blocks(events, blocks, args.timezone)
+    classify_blocks(blocks)
