@@ -62,16 +62,17 @@ block_length:
 
 ARG_DEFAULTS = {
     "start": datetime.datetime.now(),
-    "end": (datetime.datetime.now() + datetime.timedelta(days=14)),
+    "end": datetime.datetime.now() + datetime.timedelta(days=128),
     "day_start": "06",     # 0600 local time
     "day_end": "22",      # 2200 local time
     "block_length": "6",  # Hours
     "timezone": "Australia/Darwin"  # Default local timezone
 }
 BUSY_THRESHOLDS = {
-    "low": 0.35,
+    "low": 0.30,
     "high": 0.75
 }
+
 
 class Event(object):
     """An event extracted from a CalDAV calendar entry.
@@ -391,7 +392,7 @@ def parse_args():
     )
     parser.add_argument(
         "--end",
-        help="End of period to be processed (default: +14 days)",
+        help="End of period to be processed (default: +28 days)",
         metavar="yyyy-mm-dd"
     )
     parser.add_argument(
@@ -458,3 +459,4 @@ if __name__ == "__main__":
     )
     assign_hours_to_blocks(events, blocks, args.timezone)
     classify_blocks(blocks)
+    print([x.classes for x in blocks])
