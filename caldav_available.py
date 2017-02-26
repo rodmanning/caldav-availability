@@ -6,6 +6,7 @@ import urllib.request
 import pytz
 import datetime
 import math
+import json
 
 """Compute free/busy information from a CalDAV file.
 
@@ -101,7 +102,8 @@ ARG_DEFAULTS = {
     "day_end": "22",      # 2200 local time
     "block_length": "6",  # Hours
     "timezone": "Australia/Darwin",  # Default local timezone
-    "realm": "Roundcube Calendar"
+    "realm": "Roundcube Calendar",
+    "output": "text",
 }
 BUSY_THRESHOLDS = {
     "low": 0.30,
@@ -198,6 +200,20 @@ class Block(object):
         self.busy = self.busy + hours
         self.free = self.length - self.busy
 
+    def _json_default(self, obj):
+        """JSON serializer for objects not serializable by default"""
+
+        if isinstance(obj, datetime.datetime):
+            serial = obj.isoformat()
+            return serial
+        elif isinstance(obj, datetime.timedelta):
+            return str(obj)
+        raise TypeError("Type not serializable")
+
+    def as_json(self):
+        """Output the Block and it's properties using json."""
+        return json.dumps(self.__dict__, default=self._json_default)
+
 
 def get_calendar(username, password, url, realm):
     """Get a CalDAV file from a server.
@@ -268,10 +284,9 @@ def process_cal_data(cal_data, start=None, end=None,
     stack = {}   # Stack to hold data about events
     idx = 1
     for line in cal_data:
-        text = line.rstrip("\n")  # May need to .decode() on byte objects?
+        text = line.decode().rstrip("\r\n")
         try:
             field, _, data = text.partition(":")
-            data = data
             if (field == "BEGIN") and (data == "VEVENT"):
                 stack[idx] = {}
             elif field in field_list:
@@ -456,6 +471,11 @@ def parse_args():
         help="The local timezone to base the calendar on (default: {0})"
              .format(ARG_DEFAULTS["timezone"]),
     )
+    parser.add_argument(
+        "--output",
+        help="Set how the results are returned",
+        choices=["json", "python"]
+    )
     args = parser.parse_args()
     # Set defaults for args:
     for arg in ARG_DEFAULTS:
@@ -490,7 +510,12 @@ def get_availability():
     )
     assign_hours_to_blocks(events, blocks, args.timezone)
     classify_blocks(blocks)
-    print([x.classes for x in blocks])
+    if args.output == "json":
+        for b in blocks:
+            print(b.as_json())
+    elif args.output == "text":
+        for b in blocks:
+            print(b)
 
 
 if __name__ == "__main__":
