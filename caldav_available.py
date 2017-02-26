@@ -100,7 +100,8 @@ ARG_DEFAULTS = {
     "day_start": "06",     # 0600 local time
     "day_end": "22",      # 2200 local time
     "block_length": "6",  # Hours
-    "timezone": "Australia/Darwin"  # Default local timezone
+    "timezone": "Australia/Darwin",  # Default local timezone
+    "realm": "Roundcube Calendar"
 }
 BUSY_THRESHOLDS = {
     "low": 0.30,
@@ -416,7 +417,7 @@ def parse_args():
         help="URL to access CalDAV file on server"
     )
     parser.add_argument(
-        "realm",
+        "--realm",
         help="Realm to access CalDAV file on server"
     )
     parser.add_argument(
@@ -480,7 +481,7 @@ def parse_args():
     return args
 
 
-if __name__ == "__main__":
+def get_availability():
     args = parse_args()
     cal_data = get_calendar(args.username, args.password, args.url, args.realm)
     events = create_events(cal_data, args.start, args.end)
@@ -490,3 +491,7 @@ if __name__ == "__main__":
     assign_hours_to_blocks(events, blocks, args.timezone)
     classify_blocks(blocks)
     print([x.classes for x in blocks])
+
+
+if __name__ == "__main__":
+    get_availability()
