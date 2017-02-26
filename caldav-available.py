@@ -9,6 +9,10 @@ import math
 
 """Compute free/busy information from a CalDAV file.
 
+Program returns a list of Block objects that are encoded with classes
+indicating free/busy time and which are suitable for applying styles
+to HTML or other calendars to indicate free busy time.
+
 Logic of program is as follows:
 
 1. Download CalDAV file from server (requires authentication)
@@ -57,6 +61,32 @@ day_end:
 block_length:
   Length (in hours) of blocks that each day is divided into when showing
   free/busy information. Defaults to 6 hours.
+
+Outputs are:
+
+Blocks:
+  Objects with the following properties:
+
+  self.start:
+    The start of the block as a python datetime
+
+  self.end:
+    The end of the block as a python datetime
+
+  self.length:
+    The length of the block as a python timedelta
+
+  self.busy:
+    The amount of time in minutes (integer) that is busy during the block
+
+  self.free:
+    The amount of time in minutes (integer) that is free during the block
+
+  self.classes:
+    Classes assigned to the block based on the ratio of free/busy time
+
+  categories:
+    Categories of work assigned to the block (e.g. client name, etc.)
 
 """
 
@@ -144,7 +174,6 @@ class Block(object):
         self.start = kwargs["start_dt"]
         self.end = kwargs["end_dt"]
         self.length = self.end - self.start
-        self.end_dt = self.start + self.length
         self.busy = datetime.timedelta(minutes=0)
         self.free = self.length
         self.classes = []
@@ -448,11 +477,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    # This block is used to get data for *testing* this program
-    with open("./Calendar.ics", "r") as cal_file:
-        cal_data = cal_file.readlines()
-    # End test block
-    # cal_data = get_calendar(args.username, args.password, args.url, args.realm)
+    cal_data = get_calendar(args.username, args.password, args.url, args.realm)
     events = create_events(cal_data, args.start, args.end)
     blocks = create_blocks(
         args.start, args.end, args.day_start, args.day_end, args.block_length
