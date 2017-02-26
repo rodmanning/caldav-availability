@@ -90,6 +90,10 @@ Blocks:
 
 """
 
+__version__ = '1.0'
+__author__ = 'Rod Manning <rod.t.manning@gmail.com>'
+
+
 ARG_DEFAULTS = {
     "start": datetime.datetime.now(),
     "end": datetime.datetime.now() + datetime.timedelta(days=128),
@@ -143,6 +147,7 @@ class Event(object):
         self.end = kwargs["DTEND"]
         self.length = self.end - self.start
         self.categories = kwargs["CATEGORIES"].split(" ")
+        self.location = kwargs["LOCATION"]
 
     def __str__(self):
         return "{0} ({1})".format(
@@ -258,7 +263,7 @@ def process_cal_data(cal_data, start=None, end=None,
 
     """
     if field_list is None:
-        field_list = ("SUMMARY", "CATEGORIES", "STATUS", "UID")
+        field_list = ("SUMMARY", "CATEGORIES", "LOCATION", "STATUS", "UID")
     stack = {}   # Stack to hold data about events
     idx = 1
     for line in cal_data:
