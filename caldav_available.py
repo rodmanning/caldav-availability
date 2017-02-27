@@ -103,7 +103,8 @@ ARG_DEFAULTS = {
     "block_length": "6",  # Hours
     "timezone": "Australia/Darwin",  # Default local timezone
     "realm": "Roundcube Calendar",
-    "output": "text",
+    "format": "txt",
+    "output": "availability.txt"
 }
 BUSY_THRESHOLDS = {
     "low": 0.30,
@@ -412,6 +413,20 @@ def classify_blocks(blocks):
             blk.classes.append("low")
 
 
+def write_data(blocks, data_format, output_path):
+    """Write the data to the output file."""
+
+    output_file = "{0}.{1}".format(output_path, data_format)
+    for blk in blocks:
+        with open(output_file, 'a') as f:
+            if data_format == "txt":
+                f.write(blk)
+            elif data_format == "json":
+                f.writelines(blk.as_json())
+            elif data_format == "yml":
+                raise NotImplementedError("Yaml output not yet implemented")
+
+
 def parse_args():
     """Main program loop for user CLI interaction."""
     # Create the parser to process the CLI arguments
@@ -472,9 +487,13 @@ def parse_args():
              .format(ARG_DEFAULTS["timezone"]),
     )
     parser.add_argument(
-        "--output",
+        "--format",
         help="Set how the results are returned",
-        choices=["json", "python"]
+        choices=["json", "yml", "txt"]
+    )
+    parser.add_argument(
+        "--output",
+        help="Set the output file for the data.",
     )
     args = parser.parse_args()
     # Set defaults for args:
@@ -510,12 +529,7 @@ def get_availability():
     )
     assign_hours_to_blocks(events, blocks, args.timezone)
     classify_blocks(blocks)
-    if args.output == "json":
-        for b in blocks:
-            print(b.as_json())
-    elif args.output == "text":
-        for b in blocks:
-            print(b)
+    write_data(blocks, args.format, args.output)
 
 
 if __name__ == "__main__":
