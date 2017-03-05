@@ -8,6 +8,7 @@ import datetime
 import math
 import json
 
+
 """Compute free/busy information from a CalDAV file.
 
 Program returns a list of Block objects that are encoded with classes
@@ -107,7 +108,7 @@ ARG_DEFAULTS = {
     "output": "availability.txt"
 }
 BUSY_THRESHOLDS = {
-    "low": 0.30,
+    "low": 0.20,
     "high": 0.75
 }
 
@@ -150,8 +151,18 @@ class Event(object):
         self.start = kwargs["DTSTART"]
         self.end = kwargs["DTEND"]
         self.length = self.end - self.start
-        self.categories = kwargs["CATEGORIES"].split(" ")
-        self.location = kwargs["LOCATION"]
+        try:
+            self.transparency = kwargs["TRANSP"]
+        except KeyError:
+            self.transparency = ""
+        try:
+            self.location = kwargs["LOCATION"]
+        except KeyError:
+            self.location = ""
+        try:
+            self.categories = kwargs["CATEGORIES"].split(" ")
+        except KeyError:
+            self.categories = []
 
     def __str__(self):
         return "{0} ({1})".format(
@@ -187,25 +198,43 @@ class Block(object):
         self.free = self.length
         self.classes = []
         self.categories = []
+        self.location = []
+        self.assigned = float(0)
 
-    def assign(self, hours):
-        """Function to assign hours to a block.
+    def assign(self, event, hours):
+        """Function to assign hours and meta-data to a block.
 
         This is a convenience function which assigned a period of time to a
         block as 'busy' and then updates the 'free' time.
+
+        It also assigns the Categories and Location for the Event.
+
+        event:
+          An Event object.
 
         hours:
           A timedelta representing the amount of time to be assigned as busy.
 
         """
-        self.busy = self.busy + hours
-        self.free = self.length - self.busy
+        # If the event is "Transparent" then it is set to "Show Me As" Free
+        # in the calendar. So busy hours are only assigned for events that
+        # are *not* "Transparent".
+        if event.transparency != "TRANSPARENT":
+            self.busy = self.busy + hours
+            self.free = self.length - self.busy
+            self.assigned = self.busy / self.length
+        # Assign other properties to the block
+        self.location.append(event.location)
+        for item in event.categories:
+            if item not in self.categories:
+                self.categories.append(item)
 
     def _json_default(self, obj):
         """JSON serializer for objects not serializable by default"""
 
         if isinstance(obj, datetime.datetime):
-            serial = obj.isoformat()
+            fmt = "%Y-%m-%dT%H:%M:%S%z"
+            serial = obj.strftime(fmt)
             return serial
         elif isinstance(obj, datetime.timedelta):
             return str(obj)
@@ -214,6 +243,17 @@ class Block(object):
     def as_json(self):
         """Output the Block and it's properties using json."""
         return json.dumps(self.__dict__, default=self._json_default)
+
+    def classify(self):
+        not_work = ("Leave" in self.categories) or ("Off" in self.categories)
+        if not_work:
+            self.classes.append("unavailable")
+        elif self.assigned > BUSY_THRESHOLDS["high"]:
+            self.classes.append("high")
+        elif BUSY_THRESHOLDS["low"] < self.assigned <= BUSY_THRESHOLDS["high"]:
+            self.classes.append("medium")
+        elif self.assigned <= BUSY_THRESHOLDS["low"]:
+            self.classes.append("low")
 
 
 def get_calendar(username, password, url, realm):
@@ -246,7 +286,7 @@ def normalize_dt(tz_str, local_ts, ts_fmt=None):
     """Normalize a local time to UTC.
 
     An example of what this function does is that it converts the following
-    timezone string 'TZID=Asia/Hong_Kong' and a seperate timestamp string of
+    timezone string 'Asia/Hong_Kong' and a seperate timestamp string of
     '20170210T140000' into a UTC datetime of 2017-02-10 05:30:00+00:00.
 
     tz_str:
@@ -263,7 +303,10 @@ def normalize_dt(tz_str, local_ts, ts_fmt=None):
     """
     if ts_fmt is None:
         ts_fmt = "%Y%m%dT%H%M%S"
-    tz_name = tz_str.split("=")[1]
+    try:
+        tz_name = tz_str.split("=")[1]
+    except IndexError:
+        tz_name = tz_str
     tz = pytz.timezone(tz_name)
     local_dt = datetime.datetime.strptime(local_ts, ts_fmt)
     local_dt = tz.localize(local_dt)
@@ -271,7 +314,7 @@ def normalize_dt(tz_str, local_ts, ts_fmt=None):
     return utc_dt
 
 
-def process_cal_data(cal_data, start=None, end=None,
+def process_cal_data(cal_data, start, end, timezone,
                      field_list=None, ts_fmt=None):
     """Process a CalDAV file to extract information about an event.
 
@@ -281,7 +324,7 @@ def process_cal_data(cal_data, start=None, end=None,
 
     """
     if field_list is None:
-        field_list = ("SUMMARY", "CATEGORIES", "LOCATION", "STATUS", "UID")
+        field_list = ("UID", "SUMMARY", "CATEGORIES", "LOCATION", "TRANSP",)
     stack = {}   # Stack to hold data about events
     idx = 1
     for line in cal_data:
@@ -293,10 +336,25 @@ def process_cal_data(cal_data, start=None, end=None,
             elif field in field_list:
                 stack[idx][field] = data
             elif (field.startswith("DTSTART")) or (field.startswith("DTEND")):
-                field_name, _, tz_str = field.split(";")
-                utc_dt = normalize_dt(tz_str, data, ts_fmt)
-                stack[idx][field_name] = utc_dt
-                stack[idx][field_name]
+                _sub_fields = field.split(";")
+                if len(_sub_fields) == 1:
+                    # Then there's nothing here, so break to the next iteration
+                    break
+                try:
+                    if _sub_fields[1] == "VALUE=DATE":
+                        field_name = _sub_fields[0]
+                        if field_name == "DTSTART":
+                            data += "T000000"
+                        elif field_name == "DTEND":
+                            data += "T235900"
+                        utc_dt = normalize_dt(timezone, data, ts_fmt)
+                    elif _sub_fields[1] == "VALUE=DATE-TIME":
+                        field_name = _sub_fields[0]
+                        tz_str = _sub_fields[2]
+                        utc_dt = normalize_dt(tz_str, data, ts_fmt)
+                    stack[idx][field_name] = utc_dt
+                except IndexError:
+                    raise
             elif field == "END" and data == "VEVENT":
                 idx = idx + 1
         except ValueError:
@@ -304,9 +362,9 @@ def process_cal_data(cal_data, start=None, end=None,
     return stack
 
 
-def create_events(calendar_file, start, end):
+def create_events(calendar_file, start, end, timezone):
     """Create events from data contained in a CalDAV file."""
-    calendar_data = process_cal_data(calendar_file, start, end)
+    calendar_data = process_cal_data(calendar_file, start, end, timezone)
     stack = []   # List to hold the events
     for item in calendar_data.values():
         evt = Event(**item)
@@ -379,7 +437,7 @@ def calculate_overlap(obj1, obj2):
     return hours
 
 
-def assign_hours_to_blocks(events, blocks, timezone):
+def assign_block_properties(events, blocks, timezone):
     """Assign the hours in an event to a particular block.
 
     This function is based on the logic that there are going to be more blocks
@@ -394,7 +452,7 @@ def assign_hours_to_blocks(events, blocks, timezone):
         for blk in blocks:
             if check_overlap(evt, blk) is True:
                 hours = calculate_overlap(evt, blk)
-                blk.assign(hours)
+                blk.assign(evt, hours)
 
 
 def classify_blocks(blocks):
@@ -404,25 +462,21 @@ def classify_blocks(blocks):
 
     """
     for blk in blocks:
-        assigned = blk.busy / blk.length
-        if assigned > BUSY_THRESHOLDS["high"]:
-            blk.classes.append("high")
-        elif BUSY_THRESHOLDS["low"] < assigned <= BUSY_THRESHOLDS["high"]:
-            blk.classes.append("medium")
-        elif assigned <= BUSY_THRESHOLDS["low"]:
-            blk.classes.append("low")
+        blk.classify()
 
 
 def write_data(blocks, data_format, output_path):
     """Write the data to the output file."""
 
-    output_file = "{0}.{1}".format(output_path, data_format)
-    for blk in blocks:
-        with open(output_file, 'a') as f:
+    output_file = "{0}.{1}".format(
+        output_path.rsplit(".")[0], data_format
+    )
+    with open(output_file, 'w+') as f:
+        for blk in blocks:
             if data_format == "txt":
                 f.write(blk)
             elif data_format == "json":
-                f.writelines(blk.as_json())
+                f.writelines(blk.as_json() + "\n")
             elif data_format == "yml":
                 raise NotImplementedError("Yaml output not yet implemented")
 
@@ -522,12 +576,13 @@ def parse_args():
 
 def get_availability():
     args = parse_args()
-    cal_data = get_calendar(args.username, args.password, args.url, args.realm)
-    events = create_events(cal_data, args.start, args.end)
+    cal_data = get_calendar(
+        args.username, args.password, args.url, args.realm)
+    events = create_events(cal_data, args.start, args.end, args.timezone)
     blocks = create_blocks(
         args.start, args.end, args.day_start, args.day_end, args.block_length
     )
-    assign_hours_to_blocks(events, blocks, args.timezone)
+    assign_block_properties(events, blocks, args.timezone)
     classify_blocks(blocks)
     write_data(blocks, args.format, args.output)
 
