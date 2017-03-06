@@ -141,7 +141,7 @@ class Event(object):
     def __init__(self, **kwargs):
         """Initialize an Event object.
 
-        event_data:
+        kwargs:
           A dictionary containing the data from the CalDAV calendar file for
           the event.
 

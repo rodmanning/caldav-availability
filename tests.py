@@ -21,6 +21,19 @@ DTSTART;VALUE=DATE-TIME;TZID={timezone}:{datetime_as_string}
 DTEND;VALUE=DATE-TIME;TZID={timezone}:{datetime_as_string}
 SUMMARY:{summary}
 LOCATION:{location}
+TRANSP:{transp}
+CATEGORIES:{categories}
+STATUS:CONFIRMED
+END:VEVENT
+"""
+
+TEST_ALLDAY_EVENT_TEMPLATE = """BEGIN:VEVENT
+UID:{uid}
+DTSTART;VALUE=DATE;{datetime_as_string}
+DTEND;VALUE=DATE;{datetime_as_string}
+SUMMARY:{summary}
+LOCATION:{location}
+TRANSP:{transp}
 CATEGORIES:{categories}
 STATUS:CONFIRMED
 END:VEVENT
@@ -30,8 +43,8 @@ END:VEVENT
 DT_STR_FMT = "%Y%m%dT%H%M%S"
 
 
-class TestBlockObjects(unittest.TestCase):
-    """Test Block objects."""
+class TestEventObjects(unittest.TestCase):
+    """Test Event objects."""
 
     @classmethod
     def setUpClass(cls):
@@ -51,6 +64,10 @@ class TestBlockObjects(unittest.TestCase):
         """Test that an Event is created given correct input data."""
         event = cda.Event(**self._event_data[0])
         self.assertIsNotNone(event)
+
+    def test_malformed_creation(self):
+        """Test what happens when malformed kwargs are provided."""
+        pass
 
     def test_length(self):
         """Test that the length of an Event is calculated correctly."""
@@ -75,14 +92,64 @@ class TestBlockObjects(unittest.TestCase):
         pass
 
 
-class TestEventObjects(unittest.TestCase):
-    """Test Event objects."""
-    pass
+class TestBlockObjects(unittest.TestCase):
+    """Test Block objects."""
+
+    def setUpClass(cls):
+        pass
+
+    def test_assign_opaque(self):
+        """Test the assign() method when the event is "Busy"."""
+        pass
+
+    def test_assign_transparent(self):
+        """Test the assign() method when the event is "Free"."""
+        pass
+
+    def test_classify_leave(self):
+        """Test the css classification for "Leave" events."""
+        pass
+
+    def test_classify_off(self):
+        """Test the css classification for "Off" events."""
+        pass
+
+    def test_classify_assigned_hours(self):
+        """Test the css classification when hours are assigned."""
+        pass
+
+    @classmethod
+    def tearDownClass(cls):
+        pass
 
 
 class TestFunctions(unittest.TestCase):
     """Test the functions in the caldav-available program."""
     pass
+
+    def test_get_calendar(self):
+        """Test how the calendar file is retrieved."""
+        pass
+
+    def test_normalize_dt(self):
+        """Test the function used to normalize a dt to UTC."""
+        pass
+
+    def test_process_cal_data(self):
+        """Test the function used to process calendar data."""
+        pass
+
+    def test_create_block(self):
+        """Test the function used to create the calendar blocks."""
+        pass
+
+    def test_check_overlap(self):
+        """Test the function used to check for overlap between dt's."""
+        pass
+
+    def test_calculate_overlap(self):
+        """Test the calculation of the size of the overlap between events."""
+        pass
 
 
 def main():
