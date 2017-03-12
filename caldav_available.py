@@ -13,6 +13,7 @@ import pytz
 import datetime
 import math
 import json
+import pickle
 
 
 """Compute free/busy information from a CalDAV file.
@@ -184,6 +185,7 @@ class Block(object):
     calculate the free/busy information for display in a calendar.
 
     """
+    
 
     def __init__(self, **kwargs):
         """Initialize the Block object.
@@ -207,6 +209,7 @@ class Block(object):
         self.location = []
         self.assigned = float(0)
 
+        
     def assign(self, event, hours):
         """Function to assign hours and meta-data to a block.
 
@@ -235,6 +238,7 @@ class Block(object):
             if item not in self.categories:
                 self.categories.append(item)
 
+                
     def _json_default(self, obj):
         """JSON serializer for objects not serializable by default"""
 
@@ -246,10 +250,18 @@ class Block(object):
             return str(obj)
         raise TypeError("Type not serializable")
 
+    
     def as_json(self):
         """Output the Block and it's properties using json."""
         return json.dumps(self.__dict__, default=self._json_default)
 
+    
+    def as_pickle(self, f):
+        """Output the Block and it's properties using Python's pickle module."""
+        pickle.dump(self.__dict__, f)
+        
+
+    
     def classify(self):
         not_work = ("Leave" in self.categories) or ("Off" in self.categories)
         if not_work:
@@ -477,14 +489,17 @@ def write_data(blocks, data_format, output_path):
     output_file = "{0}.{1}".format(
         output_path.rsplit(".")[0], data_format
     )
-    with open(output_file, 'w+') as f:
-        for blk in blocks:
-            if data_format == "txt":
-                f.write(blk)
-            elif data_format == "json":
-                f.writelines(blk.as_json() + "\n")
-            elif data_format == "yml":
-                raise NotImplementedError("Yaml output not yet implemented")
+    if data_format == "pickle":
+        with open(output_file, 'wb+') as f:
+            for blk in blocks:
+                blk.as_pickle(f)
+    else:
+        with open(output_file, 'w+') as f:
+            for blk in blocks:
+                if data_format == "json":
+                    f.writelines(blk.as_json() + "\n")
+                elif data_format == "yml":
+                    raise NotImplementedError("Yaml output not yet implemented")
 
 
 def parse_args():
@@ -549,7 +564,7 @@ def parse_args():
     parser.add_argument(
         "--format",
         help="Set how the results are returned",
-        choices=["json", "yml", "txt"]
+        choices=["json", "pickle", "txt"]
     )
     parser.add_argument(
         "--output",

@@ -45,7 +45,7 @@ start/stop times for the blocks are able to be customized by command line
 variables.
 
 The results of the program are written to a text file. Results can be written
-in json, XML, or plain text (csv) format.
+in json, pickle or yml (coming soon!) format.
 
 
 License
