@@ -241,7 +241,7 @@ class Block(object):
         if self.assigned > 1:
             self.assigned = 1
         if self.free < datetime.timedelta(seconds=0):
-            self.free = 0
+            self.free = "0:00:00"
         if self.busy > self.length:
             self.busy = self.length
 
