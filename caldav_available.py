@@ -237,6 +237,16 @@ class Block(object):
         for item in event.categories:
             if item not in self.categories:
                 self.categories.append(item)
+        # Handle invalid data and munge it to show correct outputs
+        if self.assigned > 1:
+            print(self.assigned)
+            self.assigned = 1
+        if self.free < datetime.timedelta(seconds=0):
+            print(self.free)
+            self.free = 0
+        if self.busy > self.length:
+            print(self.busy)
+            self.busy = self.length
 
                 
     def _json_default(self, obj):
