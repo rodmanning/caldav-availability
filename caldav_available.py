@@ -112,12 +112,13 @@ ARG_DEFAULTS = {
     "timezone": "Australia/Darwin",  # Default local timezone
     "realm": "Roundcube Calendar",
     "format": "txt",
-    "output": "availability.txt"
+    "output": "availability.txt",
 }
 BUSY_THRESHOLDS = {
     "low": 0.20,
     "high": 0.75
 }
+TS_FMT = "%Y%m%dT%H%M%S"
 
 
 class Event(object):
@@ -171,6 +172,7 @@ class Event(object):
         except KeyError:
             self.categories = []
 
+        
     def __str__(self):
         return "{0} ({1})".format(
             self.name,
@@ -208,6 +210,12 @@ class Block(object):
         self.categories = []
         self.location = []
         self.assigned = float(0)
+        
+    def __str__(self):
+        return "{0} ({1})".format(
+            self.start.date(),
+            ", ".join(self.location),
+        )
 
         
     def assign(self, event, hours):
@@ -233,7 +241,8 @@ class Block(object):
             self.free = self.length - self.busy
             self.assigned = self.busy / self.length
         # Assign other properties to the block
-        self.location.append(event.location)
+        if event.location not in self.location:
+            self.location.append(event.location)
         for item in event.categories:
             if item not in self.categories:
                 self.categories.append(item)
@@ -268,7 +277,6 @@ class Block(object):
         pickle.dump(self.__dict__, f)
         
 
-    
     def classify(self):
         not_work = ("Leave" in self.categories) or ("Off" in self.categories)
         if not_work:
@@ -327,7 +335,7 @@ def normalize_dt(tz_str, local_ts, ts_fmt=None):
 
     """
     if ts_fmt is None:
-        ts_fmt = "%Y%m%dT%H%M%S"
+        ts_fmt = TS_FMT
     try:
         tz_name = tz_str.split("=")[1]
     except IndexError:
@@ -339,8 +347,8 @@ def normalize_dt(tz_str, local_ts, ts_fmt=None):
     return utc_dt
 
 
-def process_cal_data(cal_data, start, end, timezone,
-                     field_list=None, ts_fmt=None):
+def process_cal_data(cal_data, start, end,
+                     field_list=None, ts_fmt=TS_FMT):
     """Process a CalDAV file to extract information about an event.
 
     field_list:
@@ -368,16 +376,21 @@ def process_cal_data(cal_data, start, end, timezone,
                 try:
                     if _sub_fields[1] == "VALUE=DATE":
                         field_name = _sub_fields[0]
-                        if field_name == "DTSTART":
-                            data += "T000000"
-                        elif field_name == "DTEND":
-                            data += "T235900"
-                        utc_dt = normalize_dt(timezone, data, ts_fmt)
+                        date = datetime.datetime.strptime(data, "%Y%m%d").date()
+                        if field_name == "DTEND":
+                            # For all day events, the "DTEND" returned by the
+                            # calendar client in use is the *next* day. So, we
+                            # have to normalize this to *same* day to avoid it
+                            # inadvertently spanning +1 day too many...
+                            date = date + datetime.timedelta(days=-1)
+                        elif field_name == "DTSTART":
+                            pass
+                        stack[idx][field_name] = date
                     elif _sub_fields[1] == "VALUE=DATE-TIME":
                         field_name = _sub_fields[0]
                         tz_str = _sub_fields[2]
                         utc_dt = normalize_dt(tz_str, data, ts_fmt)
-                    stack[idx][field_name] = utc_dt
+                        stack[idx][field_name] = utc_dt
                 except IndexError:
                     raise
             elif field == "END" and data == "VEVENT":
@@ -387,9 +400,9 @@ def process_cal_data(cal_data, start, end, timezone,
     return stack
 
 
-def create_events(calendar_file, start, end, timezone):
+def create_events(calendar_file, start, end):
     """Create events from data contained in a CalDAV file."""
-    calendar_data = process_cal_data(calendar_file, start, end, timezone)
+    calendar_data = process_cal_data(calendar_file, start, end)
     stack = []   # List to hold the events
     for item in calendar_data.values():
         evt = Event(**item)
@@ -440,10 +453,37 @@ def create_blocks(start_dt, end_dt, start_hour, end_hour, block_length):
     return stack
 
 
+def _is_date(obj):
+    """Check whether objects are datetime.date objects.
+
+    This function checks whether the '.start' and '.end' properties of an
+    object are datetime.date objects and returns True/False accordingly.
+
+    """
+    start_is_date = type(obj.start) is datetime.date
+    end_is_date = type(obj.end) is datetime.date
+    if start_is_date or end_is_date:
+        return True
+    else:
+        return False
+
 def check_overlap(obj1, obj2):
     """Check whether two objects with start and end datetimes overlap."""
-    check_1 = (obj1.start <= obj2.start <= obj1.end)
-    check_2 = (obj2.start <= obj1.start <= obj2.end)
+    # Else it's a datetime.datetime object and check for overlap
+    try:
+        check_1 = (obj1.start <= obj2.start <= obj1.end)
+        check_2 = (obj2.start <= obj1.start <= obj2.end)
+    except TypeError:
+        # Will be raised if *one* of the objects is a date and the other is a
+        # datetime.
+        if _is_date(obj1):
+            check_1 = (obj1.start <= obj2.start.date() <= obj1.end)
+            check_2 = (obj2.start.date() <= obj1.start <= obj2.end.date())
+        elif _is_ate(obj2):
+            check_1 = (obj1.start.date() <= obj2.start <= obj1.end.date())
+            check_2 = (obj2.start <= obj1.start.date() <= obj2.end)
+        else:
+            raise
     if check_1 or check_2 is True:
         return True
     else:
@@ -456,13 +496,26 @@ def calculate_overlap(obj1, obj2):
     Each object must have a start and end property expressed as a datetime.
 
     """
-    max_start = max(obj1.start, obj2.start)
-    min_end = min(obj1.end, obj2.end)
-    hours = min_end - max_start
-    return hours
+    # Handle date objects (as start/end time *must* be 0000/2359, so they
+    # overlap for the duration of the block.
+    obj1_is_date = _is_date(obj1)
+    obj2_is_date = _is_date(obj2)
+    if obj1_is_date == True or obj2_is_date == True:
+        stack = []
+        stack.append(obj1.end - obj1.start)
+        stack.append(obj2.end - obj2.start)
+        hours = min(h for h in stack if h > datetime.timedelta(minutes=0))
+        return hours
+    else:
+        # Else it's a datetime.datetime object and calculate the size of the
+        # overlap
+        max_start = max(obj1.start, obj2.start)
+        min_end = min(obj1.end, obj2.end)
+        hours = min_end - max_start
+        return hours
 
 
-def assign_block_properties(events, blocks, timezone):
+def assign_block_properties(events, blocks):
     """Assign the hours in an event to a particular block.
 
     This function is based on the logic that there are going to be more blocks
@@ -606,11 +659,11 @@ def get_availability():
     args = parse_args()
     cal_data = get_calendar(
         args.username, args.password, args.url, args.realm)
-    events = create_events(cal_data, args.start, args.end, args.timezone)
+    events = create_events(cal_data, args.start, args.end)
     blocks = create_blocks(
         args.start, args.end, args.day_start, args.day_end, args.block_length
     )
-    assign_block_properties(events, blocks, args.timezone)
+    assign_block_properties(events, blocks)
     classify_blocks(blocks)
     write_data(blocks, args.format, args.output)
 
