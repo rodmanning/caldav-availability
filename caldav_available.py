@@ -154,10 +154,15 @@ class Event(object):
           the event.
 
         """
-        self.uid = kwargs["UID"]
-        self.name = kwargs["SUMMARY"]
-        self.start = kwargs["DTSTART"]
-        self.end = kwargs["DTEND"]
+        try:
+            self.uid = kwargs["UID"]
+            self.name = kwargs["SUMMARY"]
+            self.start = kwargs["DTSTART"]
+            self.end = kwargs["DTEND"]
+        except KeyError as error:
+            raise error
+        if self.start >= self.end:
+            raise ValueError("Start datetime must be before end datetime.")
         self.length = self.end - self.start
         try:
             self.transparency = kwargs["TRANSP"]

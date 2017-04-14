@@ -56,9 +56,8 @@ DT_STR_FMT = "%Y%m%dT%H%M%S"
 class TestEventObjects(unittest.TestCase):
     """Test Event objects."""
 
-    @classmethod
-    def setUpClass(cls):
-        cls._event_data = [
+    def setUp(self):
+        self._event_data = [
             {
                 "UID": uuid.uuid4(),
                 "DTSTART": datetime.strptime("20170201T120000", DT_STR_FMT),
@@ -68,17 +67,47 @@ class TestEventObjects(unittest.TestCase):
                 "LOCATION": "Melbourne",
             },
         ]
-        cls._event = cda.Event(**cls._event_data[0])
+        self._event = cda.Event(**self._event_data[0])
 
     def test_creation(self):
         """Test that an Event is created given correct input data."""
         event = cda.Event(**self._event_data[0])
         self.assertIsNotNone(event)
 
-    def test_malformed_creation(self):
-        """Test what happens when malformed kwargs are provided."""
-        pass
+    def test_missing_uuid(self):
+        """Test creating and Event with no uuid data."""
+        malformed_data = self._event_data.copy()
+        del malformed_data[0]["UID"]
+        with self.assertRaises(KeyError) as context:
+            cda.Event(**malformed_data[0])
+        
+        
+    def test_missing_start(self):
+        """Test malformed data: start dt missing."""
+        # Test an Event with no start dt
+        malformed_data = self._event_data.copy()
+        malformed_data[0]["DTSTART"] = None
+        with self.assertRaises(TypeError) as context:
+            cda.Event(**malformed_data[0])
 
+    def test_zero_length_event(self):
+        # Test a zero-length Event
+        malformed_data = self._event_data.copy()
+        malformed_data[0]["DTSTART"] = malformed_data[0]["DTEND"]
+        self.assertEqual(malformed_data[0]["DTEND"],
+                         malformed_data[0]["DTSTART"])
+        with self.assertRaises(ValueError) as context:
+            event = cda.Event(**malformed_data[0])
+
+    def test_invalid_length_event(self):
+        # Test an Event that has a start after the end
+        malformed_data = self._event_data.copy()
+        malformed_data[0]["DTEND"] = datetime.strptime(
+            "2016201T120000", DT_STR_FMT)
+        self.assertTrue(malformed_data[0]["DTEND"] < malformed_data[0]["DTSTART"])
+        with self.assertRaises(ValueError) as context:
+            cda.Event(**malformed_data[0])        
+        
     def test_length(self):
         """Test that the length of an Event is calculated correctly."""
         self.assertEqual(self._event.start,
@@ -97,14 +126,12 @@ class TestEventObjects(unittest.TestCase):
     def test_location(self):
         self.assertEqual(self._event.location, "Melbourne")
 
-    @classmethod
-    def tearDownClass(cls):
-        pass
 
 
 class TestBlockObjects(unittest.TestCase):
     """Test Block objects."""
 
+    @classmethod
     def setUpClass(cls):
         pass
 
