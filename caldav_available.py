@@ -474,7 +474,6 @@ def _is_date(obj):
 
 def check_overlap(obj1, obj2):
     """Check whether two objects with start and end datetimes overlap."""
-    # Else it's a datetime.datetime object and check for overlap
     try:
         check_1 = (obj1.start <= obj2.start <= obj1.end)
         check_2 = (obj2.start <= obj1.start <= obj2.end)
