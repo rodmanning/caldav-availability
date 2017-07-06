@@ -109,7 +109,7 @@ ARG_DEFAULTS = {
     "day_start": "06",     # 0600 local time
     "day_end": "22",      # 2200 local time
     "block_length": "6",  # Hours
-    "timezone": "Australia/Darwin",  # Default local timezone
+    "timezone": "Australia/Melbourne",  # Default local timezone
     "realm": "Roundcube Calendar",
     "format": "txt",
     "output": "availability.txt",
@@ -177,7 +177,7 @@ class Event(object):
         except KeyError:
             self.categories = []
 
-        
+
     def __str__(self):
         return "{0} ({1})".format(
             self.name,
@@ -192,7 +192,7 @@ class Block(object):
     calculate the free/busy information for display in a calendar.
 
     """
-    
+
 
     def __init__(self, **kwargs):
         """Initialize the Block object.
@@ -215,14 +215,14 @@ class Block(object):
         self.categories = []
         self.location = []
         self.assigned = float(0)
-        
+
     def __str__(self):
         return "{0} ({1})".format(
             self.start.date(),
             ", ".join(self.location),
         )
 
-        
+
     def assign(self, event, hours):
         """Function to assign hours and meta-data to a block.
 
@@ -259,7 +259,7 @@ class Block(object):
         if self.busy > self.length:
             self.busy = self.length
 
-                
+
     def _json_default(self, obj):
         """JSON serializer for objects not serializable by default"""
 
@@ -271,16 +271,16 @@ class Block(object):
             return str(obj)
         raise TypeError("Type not serializable")
 
-    
+
     def as_json(self):
         """Output the Block and it's properties using json."""
         return json.dumps(self.__dict__, default=self._json_default)
 
-    
+
     def as_pickle(self, f):
         """Output the Block and it's properties using Python's pickle module."""
         pickle.dump(self.__dict__, f)
-        
+
 
     def classify(self):
         not_work = ("Leave" in self.categories) or ("Off" in self.categories)
@@ -381,19 +381,14 @@ def process_cal_data(cal_data, start, end,
                 try:
                     if _sub_fields[1] == "VALUE=DATE":
                         field_name = _sub_fields[0]
-                        date = datetime.datetime.strptime(data, "%Y%m%d").date()
-                        if field_name == "DTEND":
-                            # For all day events, the "DTEND" returned by the
-                            # calendar client in use is the *next* day. So, we
-                            # have to normalize this to *same* day to avoid it
-                            # inadvertently spanning +1 day too many...
-                            date = date + datetime.timedelta(days=-1)
-                        elif field_name == "DTSTART":
-                            pass
-                        stack[idx][field_name] = date
-                    elif _sub_fields[1] == "VALUE=DATE-TIME":
+                        date = datetime.datetime.strptime(data, "%Y%m%d")
+                        tz = pytz.timezone(ARG_DEFAULTS["timezone"])
+                        lcl_dt = tz.localize(date)
+                        utc_dt = lcl_dt.astimezone(pytz.utc)
+                        stack[idx][field_name] = utc_dt
+                    elif _sub_fields[1].startswith("TZID="):
                         field_name = _sub_fields[0]
-                        tz_str = _sub_fields[2]
+                        tz_str = _sub_fields[1]
                         utc_dt = normalize_dt(tz_str, data, ts_fmt)
                         stack[idx][field_name] = utc_dt
                 except IndexError:
@@ -483,7 +478,7 @@ def check_overlap(obj1, obj2):
         if _is_date(obj1):
             check_1 = (obj1.start <= obj2.start.date() <= obj1.end)
             check_2 = (obj2.start.date() <= obj1.start <= obj2.end.date())
-        elif _is_ate(obj2):
+        elif _is_date(obj2):
             check_1 = (obj1.start.date() <= obj2.start <= obj1.end.date())
             check_2 = (obj2.start <= obj1.start.date() <= obj2.end)
         else:
